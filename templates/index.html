@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Mesang</title>
+<link rel="stylesheet" href="/static/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<!-- Auth Screen -->
+<div id="authScreen" class="auth-screen">
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="brand">
+        <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <h1>AI Mesang</h1>
+        <p class="tagline">Мессенджер будущего</p>
+      </div>
+      <div id="authError" class="auth-error"></div>
+      <h2>Вход</h2>
+      <div class="input-group"><input type="text" id="authUsername" placeholder="Логин или Email" autocomplete="off"><span class="input-icon">👤</span></div>
+      <div class="input-group"><input type="password" id="authPassword" placeholder="Пароль" autocomplete="off"><span class="input-icon">🔒</span></div>
+      <button id="authLogin" class="btn-primary" disabled>Войти</button>
+      <p class="switch-text" id="toggleMode">Нет аккаунта? <span>Зарегистрироваться</span></p>
+      
+      <!-- Registration (hidden by default) -->
+      <div id="regSection" class="hidden">
+        <h2>Регистрация</h2>
+        <div class="input-group"><input type="text" id="authUsernameReg" placeholder="Имя пользователя" autocomplete="off"><span class="input-icon">👤</span></div>
+        <div class="input-group"><input type="email" id="authEmailReg" placeholder="Email (необязательно)" autocomplete="off"><span class="input-icon">📧</span></div>
+        <div class="input-group"><input type="password" id="authPasswordReg" placeholder="Пароль" autocomplete="off"><span class="input-icon">🔒</span></div>
+        <button id="authReg" class="btn-primary" disabled>Зарегистрироваться</button>
+        <p class="switch-text" id="backToLogin">Уже есть аккаунт? <span>Войти</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Messenger -->
+<div id="msgScreen" class="messenger hidden">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-small"><div class="brand-icon-sm">AI</div><span>AI Mesang</span></div>
+      <div class="sidebar-actions">
+        <button class="icon-btn" id="searchBtn" title="Найти"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></button>
+        <button class="icon-btn" id="newChatBtn" title="Новый чат"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div>
+    </div>
+    <div class="my-profile-bar">
+      <div class="avatar me" id="myAvatar">U</div>
+      <div class="me-info">
+        <span class="me-name" id="myName">User</span>
+        <span class="me-badge" id="myBadge"></span>
+      </div>
+      <div class="status-dot online"></div>
+      <button class="icon-btn" id="profileBtn" title="Профиль"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
+      <button class="icon-btn" id="adminPanelBtn" title="Админ-панель" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
+    </div>
+    <div class="chat-list" id="chatList"></div>
+  </div>
+
+  <!-- Chat Area -->
+  <div class="chat-area">
+    <div id="noChat" class="no-chat">
+      <div class="no-chat-content">
+        <div class="no-chat-icon"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <h3>AI Mesang</h3><p>Выберите чат или создайте новый</p>
+      </div>
+    </div>
+    <div id="chatView" class="hidden">
+      <div class="chat-header">
+        <div class="avatar sm" id="cAvatar">?</div>
+        <div class="chat-header-info">
+          <span class="chat-header-name" id="cTitle">Чат</span>
+          <span class="chat-header-status" id="cStatus">онлайн</span>
+        </div>
+        <div class="chat-header-actions">
+          <button class="icon-btn" title="Поиск"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></button>
+          <button class="icon-btn" title="Ещё"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+        </div>
+      </div>
+      <div class="messages-container" id="msgContainer"></div>
+      <div class="message-input-area">
+        <div class="typing-indicator" id="typingIndicator" style="display:none"><span id="typingText"></span></div>
+        <div class="input-wrapper">
+          <input type="text" id="msgInput" placeholder="Написать сообщение..." autocomplete="off">
+          <button id="sendBtn" class="send-btn" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modalOverlay" class="modal-overlay hidden"><div class="modal" id="modalContent"></div></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

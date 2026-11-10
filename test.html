@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Тест API</title></head>
+<body>
+<h1>Тест регистрации</h1>
+<div id="result"></div>
+<button onclick="testReg()">Зарегистрироваться</button>
+<button onclick="testLogin()">Войти</button>
+<script>
+async function testReg() {
+    const res = document.getElementById('result');
+    try {
+        const r = await fetch('http://localhost:8765/api/register', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username: 'test123', password: 'pass123'})
+        });
+        const d = await r.json();
+        res.innerHTML = `<p>Статус: ${r.status}</p><pre>${JSON.stringify(d, null, 2)}</pre>`;
+        console.log('Register:', d);
+    } catch(e) {
+        res.innerHTML = `<p style="color:red">Ошибка: ${e.message}</p>`;
+        console.error('Register error:', e);
+    }
+}
+async function testLogin() {
+    const res = document.getElementById('result');
+    try {
+        const r = await fetch('http://localhost:8765/api/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username: 'test123', password: 'pass123'})
+        });
+        const d = await r.json();
+        res.innerHTML += `<p>Статус: ${r.status}</p><pre>${JSON.stringify(d, null, 2)}</pre>`;
+        console.log('Login:', d);
+    } catch(e) {
+        res.innerHTML += `<p style="color:red">Ошибка: ${e.message}</p>`;
+        console.error('Login error:', e);
+    }
+}
+</script>
+</body>
+</html>
