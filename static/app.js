@@ -1,8 +1,53 @@
-// AI Mesang - Client Script
+// AI Mesang v5 - Telegram Style
 var API = "/api";
 var WS_URL = "ws://" + window.location.host + "/ws";
 var $ = function(s) { return document.querySelector(s); };
-var S = {uid:null,email:"",uname:"",isAdmin:false,isVerified:false,chats:[],chat:null,msgs:[],users:[],ws:null,typing:false,tTO:null,bio:"",birth_date:"",members:[]};
+var S = {uid:null,email:"",uname:"",isAdmin:false,isVerified:false,chats:[],chat:null,msgs:[],users:[],ws:null,typing:false,tTO:null,bio:"",birth_date:"",members:[],token:null,avatar:""};
+
+// ── Local Storage (Сохранение сессии) ──
+function saveSession() {
+    if (S.uid && S.token) {
+        localStorage.setItem("mesang_token", S.token);
+        localStorage.setItem("mesang_uid", S.uid);
+        localStorage.setItem("mesang_uname", S.uname);
+        localStorage.setItem("mesang_email", S.email);
+        localStorage.setItem("mesang_admin", S.isAdmin);
+        localStorage.setItem("mesang_verified", S.isVerified);
+        localStorage.setItem("mesang_avatar", S.avatar);
+        localStorage.setItem("mesang_bio", S.bio);
+        localStorage.setItem("mesang_birth", S.birth_date);
+    }
+}
+
+function loadSession() {
+    var token = localStorage.getItem("mesang_token");
+    var uid = localStorage.getItem("mesang_uid");
+    if (token && uid) {
+        S.token = token;
+        S.uid = parseInt(uid);
+        S.uname = localStorage.getItem("mesang_uname") || "User";
+        S.email = localStorage.getItem("mesang_email") || "";
+        S.isAdmin = localStorage.getItem("mesang_admin") === "true";
+        S.isVerified = localStorage.getItem("mesang_verified") === "true";
+        S.avatar = localStorage.getItem("mesang_avatar") || "";
+        S.bio = localStorage.getItem("mesang_bio") || "";
+        S.birth_date = localStorage.getItem("mesang_birth") || "";
+        return true;
+    }
+    return false;
+}
+
+function clearSession() {
+    localStorage.removeItem("mesang_token");
+    localStorage.removeItem("mesang_uid");
+    localStorage.removeItem("mesang_uname");
+    localStorage.removeItem("mesang_email");
+    localStorage.removeItem("mesang_admin");
+    localStorage.removeItem("mesang_verified");
+    localStorage.removeItem("mesang_avatar");
+    localStorage.removeItem("mesang_bio");
+    localStorage.removeItem("mesang_birth");
+}
 
 // ── Auth ──
 $("#authUsername").addEventListener("input",checkAuth);
@@ -20,7 +65,6 @@ function checkAuth() {
     $("#authReg").disabled = !u2 || !p2;
 }
 
-// Toggle between login and registration
 $("#toggleMode").addEventListener("click", function() {
     $("#authUsername").parentElement.classList.add("hidden");
     $("#authPassword").parentElement.classList.add("hidden");
@@ -52,10 +96,12 @@ $("#authLogin").addEventListener("click", function() {
         return r.json();
     }).then(function(data) {
         S.uid = data.id;
+        S.token = data.token;
         S.email = data.email || "";
         S.uname = data.username || data.email;
         S.isAdmin = data.is_admin;
         S.isVerified = data.is_verified;
+        saveSession();
         loadProfile().then(function() { showApp(); });
     }).catch(function(e) { showAuthError(e.message); });
 });
@@ -74,8 +120,10 @@ $("#authReg").addEventListener("click", function() {
         return r.json();
     }).then(function(data) {
         S.uid = data.id;
+        S.token = data.token;
         S.email = data.email || "";
         S.uname = username;
+        saveSession();
         loadProfile().then(function() { showApp(); });
     }).catch(function(e) { showAuthError(e.message); });
 });
@@ -88,13 +136,22 @@ function showAuthError(msg) {
 
 // ── App ──
 function loadProfile() {
-    return fetch(API + "/me?user_id=" + S.uid).then(function(r) { return r.json(); }).then(function(me) {
+    return fetch(API + "/me?user_id=" + S.uid).then(function(r) { 
+        if (!r.ok && r.status === 401) {
+            clearSession();
+            showAuthScreen();
+            throw new Error("Session expired");
+        }
+        return r.json(); 
+    }).then(function(me) {
         S.uname = me.username || S.uname;
         S.email = me.email || "";
         S.bio = me.bio || "";
         S.birth_date = me.birth_date || "";
-        updateMyAvatar(me.avatar);
+        S.avatar = me.avatar || "";
+        updateMyAvatar(S.avatar);
         updateBadges();
+        saveSession();
     });
 }
 
@@ -105,6 +162,23 @@ function showApp() {
     connectWS();
     fetchChats();
 }
+
+function showAuthScreen() {
+    $("#authScreen").classList.remove("hidden");
+    $("#msgScreen").classList.add("hidden");
+}
+
+// ── Auto Login on Page Load ──
+(function() {
+    if (loadSession()) {
+        loadProfile().then(function() {
+            showApp();
+        }).catch(function() {
+            // Если токен невалидный, показываем экран входа
+            showAuthScreen();
+        });
+    }
+})();
 
 function updateMyAvatar(avatar) {
     var el = $("#myAvatar");
@@ -136,8 +210,6 @@ function connectWS() {
                 renderMsgs();
             }
             fetchChats();
-        } else if (d.type === "user_typing" && S.chat && d.chat_id === S.chat.id) {
-            showTyping("Кто-то печатает...");
         }
     };
     ws.onclose = function() { setTimeout(function() { if (S.uid) connectWS(); }, 1500); };
@@ -175,6 +247,7 @@ function openChat(c) {
     if (!c) return;
     S.chat = c;
     $("#noChat").classList.add("hidden");
+    $("#shortsView").classList.add("hidden");
     $("#chatView").classList.remove("hidden");
     $("#cTitle").textContent = c.name || "Чат";
     $("#cAvatar").textContent = (c.name || "?")[0].toUpperCase();
@@ -191,8 +264,6 @@ function openChat(c) {
         S.msgs = msgs;
         renderMsgs();
     }).catch(function(e) { console.error(e); });
-    
-    // Загружаем участников чата
     fetchMembers(c.id);
 }
 
@@ -222,38 +293,51 @@ function renderMembers(members) {
 // ── Messages ──
 function renderMsgs() {
     var container = $("#msgContainer");
-    container.innerHTML = S.msgs.map(function(m) {
+    var html = '';
+    for (var i = 0; i < S.msgs.length; i++) {
+        var m = S.msgs[i];
         var isAI = m.sender_id === 0 || m.username === "AI Assistant";
-        return '<div class="message ' + (m.sender_id === S.uid ? 'outgoing' : '') + (isAI ? ' ai-message' : '') + '">' +
-            (m.sender_id !== S.uid && m.sender_id !== 0 ? '<div class="sender-avatar">' + (m.username || "?")[0].toUpperCase() + '</div>' : "") +
-            '<div class="message-bubble"><div class="message-content">' + esc(m.content) + '</div><div class="message-time">' + fmt(m.timestamp) + '</div></div>' +
-            '</div>';
-    }).join("");
-    var mc = $("#msgContainer");
-    mc.scrollTop = mc.scrollHeight;
+        var isOut = m.sender_id === S.uid;
+        html += '<div class="message ' + (isOut ? 'outgoing' : '') + (isAI ? ' ai-message' : '') + '">';
+        if (!isOut && m.sender_id !== 0) {
+            html += '<div class="sender-avatar">' + (m.username || "?")[0].toUpperCase() + '</div>';
+        }
+        html += '<div class="message-bubble"><div class="message-content">' + esc(m.content) + '</div>';
+        html += '<div class="message-time">' + fmt(m.timestamp) + '</div></div></div>';
+    }
+    container.innerHTML = html;
+    setTimeout(function() { container.scrollTop = container.scrollHeight; }, 50);
 }
 
 function sendMsg() {
     var t = $("#msgInput").value.trim();
     if (!t || !S.chat) return;
-    
-    // Отправляем через REST API (надёжнее)
-    fetch(API + "/chats/" + S.chat.id + "/messages", {
+    fetch(API + "/chats/" + S.chat.id + "/messages?user_id=" + S.uid, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({content: t})
-    }).then(function(r) { return r.json(); }).then(function(data) {
-        // Обновляем сообщения
+    }).then(function(r) { 
+        if (!r.ok && r.status === 401) {
+            clearSession();
+            showAuthScreen();
+            throw new Error("Session expired");
+        }
+        return r.json(); 
+    }).then(function(data) {
         if (data.ai_reply) {
             S.msgs.push(data.message, data.ai_reply);
         } else {
             S.msgs.push(data.message);
         }
         renderMsgs();
-        fetchChats(); // Обновляем превью в списке
+        fetchChats();
         $("#msgInput").value = "";
         $("#sendBtn").disabled = true;
-    }).catch(function(e) { console.error("Send error:", e); });
+    }).catch(function(e) { 
+        if (e.message !== "Session expired") {
+            console.error("Send error:", e);
+        }
+    });
 }
 
 $("#sendBtn").addEventListener("click", sendMsg);
@@ -278,31 +362,63 @@ $("#modalOverlay").addEventListener("click", function(e) {
     if (e.target === $("#modalOverlay")) closeModal();
 });
 
-// ── Profile Modal ──
+// ── Profile Modal (Telegram Style) ──
 $("#profileBtn").addEventListener("click", function() {
     var modal = $("#modalContent");
-    var avatarHtml = S.uname[0].toUpperCase();
-    modal.innerHTML = '<h3>👤 Профиль</h3>' +
-        '<div class="profile-header"><div class="profile-avatar" id="profileAvatar">' +
-        avatarHtml + '<div class="avatar-overlay">📷</div></div>' +
+    var avatarBg = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+    modal.innerHTML = '<div class="profile-page">' +
+        '<div class="profile-bg" style="background:' + avatarBg + '"></div>' +
+        '<div class="profile-content">' +
+        '<div class="profile-avatar-large" id="profileAvatarLarge" style="background:#fff">' + (S.uname[0].toUpperCase()) + '</div>' +
         '<input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="handleAvatar(event)">' +
         '<div class="profile-name">' + esc(S.uname) + '</div>' +
-        '<div class="profile-badges">' + (S.isAdmin ? '<span class="badge badge-admin">🛡️ Админ</span>' : '') +
-        (S.isVerified ? '<span class="badge badge-verified">✓ Верифицирован</span>' : '') +
-        (!S.isAdmin && !S.isVerified ? '<span class="badge" style="color:var(--text3)">Обычный пользователь</span>' : '') + '</div></div>' +
-        '<div class="input-group"><input type="text" id="profBio" placeholder="О себе..." value="' + esc(S.bio) + '"></div>' +
-        '<div class="input-group"><input type="date" id="profBirth" value="' + S.birth_date + '"></div>' +
-        '<button class="btn-primary" id="profSave">💾 Сохранить</button>' +
-        '<button class="btn-secondary" onclick="closeModal()">Закрыть</button>';
+        '<div class="profile-email">' + (S.email || "Email не указан") + '</div>' +
+        '<div class="profile-badges">' +
+            (S.isAdmin ? '<span class="badge badge-admin">🛡️ Админ</span>' : '') +
+            (S.isVerified ? '<span class="badge badge-verified">✓ Верифицирован</span>' : '') +
+            (!S.isAdmin && !S.isVerified ? '<span class="badge">Обычный пользователь</span>' : '') +
+        '</div>' +
+        '<div class="profile-details">' +
+            (S.bio ? '<div class="detail-item"><span class="detail-label">О себе</span><span class="detail-value">' + esc(S.bio) + '</span></div>' : '') +
+            (S.birth_date ? '<div class="detail-item"><span class="detail-label">Дата рождения</span><span class="detail-value">' + S.birth_date + '</span></div>' : '') +
+        '</div>' +
+        '<div class="profile-actions">' +
+            '<button class="btn-primary" id="editProfileBtn">✏️ Редактировать</button>' +
+            '<button class="btn-secondary" onclick="closeModal()">Закрыть</button>' +
+        '</div>' +
+        '</div></div>';
     $("#modalOverlay").classList.remove("hidden");
-    $("#profSave").onclick = function() {
-        var bio = $("#profBio").value.trim();
-        var birth = $("#profBirth").value;
-        fetch(API + "/profile?user_id=" + S.uid, {
-            method: "PUT",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({bio: bio, birth_date: birth})
-        }).then(function() { closeModal(); alert("✅ Сохранено!"); }).catch(function() { alert("Ошибка!"); });
+    
+    if (S.avatar) {
+        $("#profileAvatarLarge").innerHTML = '<img src="' + S.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+    }
+    
+    $("#editProfileBtn").onclick = function() {
+        var modal = $("#modalContent");
+        modal.innerHTML = '<div class="edit-profile">' +
+            '<h3>✏️ Редактировать профиль</h3>' +
+            '<div class="profile-photo-section">' +
+                '<div class="profile-photo-circle" onclick="document.getElementById(\'avatarInput2\').click()">' +
+                    (S.avatar ? '<img src="' + S.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">' : (S.uname[0].toUpperCase())) +
+                    '<div class="camera-icon">📷</div>' +
+                '</div>' +
+                '<input type="file" id="avatarInput2" accept="image/*" style="display:none" onchange="handleAvatar(event)">' +
+                '<p>Нажмите чтобы сменить фото</p>' +
+            '</div>' +
+            '<div class="input-group"><input type="text" id="profBio" placeholder="О себе..." value="' + esc(S.bio || '') + '"></div>' +
+            '<div class="input-group"><input type="date" id="profBirth" value="' + (S.birth_date || '') + '"></div>' +
+            '<button class="btn-primary" id="profSave">💾 Сохранить</button>' +
+            '<button class="btn-secondary" onclick="closeModal()">Отмена</button>';
+        
+        $("#profSave").onclick = function() {
+            var bio = $("#profBio").value.trim();
+            var birth = $("#profBirth").value;
+            fetch(API + "/profile?user_id=" + S.uid, {
+                method: "PUT",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({bio: bio, birth_date: birth})
+            }).then(function() { closeModal(); alert("✅ Сохранено!"); }).catch(function() { alert("Ошибка!"); });
+        };
     };
 });
 
@@ -316,7 +432,12 @@ function handleAvatar(e) {
             method: "PUT",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({avatar: base64})
-        }).then(function() { updateMyAvatar(base64); closeModal(); alert("✅ Аватарка обновлена!"); }).catch(function() { alert("Ошибка!"); });
+        }).then(function() { 
+            S.avatar = base64;
+            updateMyAvatar(base64);
+            closeModal(); 
+            alert("✅ Аватарка обновлена!"); 
+        }).catch(function() { alert("Ошибка!"); });
     };
     reader.readAsDataURL(file);
 }
@@ -433,16 +554,17 @@ function doAdmin(targetId, action) {
     }).then(function() { $("#adminPanelBtn").click(); }).catch(function(e) { console.error(e); });
 }
 
-// ── Shorts ──
+// ── Shorts (TikTok Style) ──
 var shorts = [
-    {id:1, title:"Как создать мессенджер", author:"AI Mesang", color:"#6366f1"},
-    {id:2, title:"10 лайфхаков для программирования", author:"CodeMaster", color:"#8b5cf6"},
-    {id:3, title:"Тренды 2024 года", author:"TrendWatch", color:"#ec4899"},
-    {id:4, title:"Смешные коты 🐱", author:"CatLover", color:"#f59e0b"},
-    {id:5, title:"Как выучить Python за неделю", author:"PythonPro", color:"#10b981"},
-    {id:6, title:"Лучшие мемы недели", author:"MemeKing", color:"#ef4444"}
+    {id:1, title:"Как создать мессенджер за 5 минут", author:"@ai_mesang", color:"#6366f1", emoji:"🚀"},
+    {id:2, title:"Топ 10 лайфхаков для программиста", author:"@code_master", color:"#8b5cf6", emoji:"💻"},
+    {id:3, title:"Тренды 2024 что нужно знать", author:"@trend_watch", color:"#ec4899", emoji:"📈"},
+    {id:4, title:"Смешные коты сборник", author:"@cat_lover", color:"#f59e0b", emoji:"🐱"},
+    {id:5, title:"Как выучить Python за неделю", author:"@python_pro", color:"#10b981", emoji:"🐍"},
+    {id:6, title:"Мемы недели выпуск 42", author:"@meme_king", color:"#ef4444", emoji:"😂"}
 ];
 var currentShort = 0;
+var shortInterval;
 
 function showShorts() {
     $("#chatView").classList.add("hidden");
@@ -462,39 +584,81 @@ function hideShorts() {
 
 function renderShorts() {
     var container = $("#shortsContainer");
-    container.innerHTML = shorts.map(function(s, i) {
-        return '<div class="shorts-item ' + (i === currentShort ? 'active' : '') + '" data-id="' + s.id + '" style="transform:translateY(' + ((i - currentShort) * 100) + '%)">
-            <div class="shorts-video" style="background:' + s.color + ';display:flex;align-items:center;justify-content:center;font-size:48px;">🎬</div>
-            <div class="shorts-info">
-                <div class="shorts-title">' + esc(s.title) + '</div>
-                <div class="shorts-author">@' + esc(s.author) + '</div>
-            </div>
-            <div class="shorts-actions">
-                <button class="shorts-action-btn" onclick="likeShort(' + s.id + ')">❤️</button>
-                <button class="shorts-action-btn" onclick="commentShort(' + s.id + ')">💬</button>
-                <button class="shorts-action-btn" onclick="shareShort(' + s.id + ')">📤</button>
-            </div>
-        </div>';
-    }).join("");
-    updateShortsProgress();
+    var s = shorts[currentShort];
+    container.innerHTML = '<div class="shorts-fullscreen">' +
+        '<div class="shorts-item active" style="background:' + s.color + '">' +
+            '<div class="shorts-video">' + s.emoji + '</div>' +
+            '<div class="shorts-overlay">' +
+                '<div class="shorts-info">' +
+                    '<div class="shorts-title">' + esc(s.title) + '</div>' +
+                    '<div class="shorts-author">' + esc(s.author) + '</div>' +
+                    '<div class="shorts-desc">Добро пожаловать в AI Mesang Shorts! 🎬</div>' +
+                '</div>' +
+                '<div class="shorts-actions-side">' +
+                    '<button class="shorts-action-btn" onclick="likeShort(' + s.id + ')"><span class="action-icon">❤️</span><span class="action-count">0</span></button>' +
+                    '<button class="shorts-action-btn" onclick="commentShort(' + s.id + ')"><span class="action-icon">💬</span><span class="action-count">0</span></button>' +
+                    '<button class="shorts-action-btn" onclick="shareShort(' + s.id + ')"><span class="action-icon">📤</span><span class="action-count">0</span></button>' +
+                    '<button class="shorts-action-btn" onclick="followAuthor(' + s.id + ')"><span class="action-icon">👤</span></button>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="shorts-nav">' +
+            '<button class="shorts-nav-btn next" onclick="nextShort()">▼</button>' +
+            '<button class="shorts-nav-btn prev" onclick="prevShort()">▲</button>' +
+        '</div>' +
+        '<div class="shorts-dots">' + shorts.map(function(_, i) {
+            return '<span class="shorts-dot ' + (i === currentShort ? 'active' : '') + '" onclick="goToShort(' + i + ')"></span>';
+        }).join('') + '</div>' +
+    '</div>';
+    
+    clearInterval(shortInterval);
+    shortInterval = setInterval(function() {
+        if ($(currentShort === shorts.length - 1 ? '.shorts-nav-btn.prev' : '.shorts-nav-btn.next')) {
+            nextShort();
+        }
+    }, 15000);
 }
 
-function updateShortsProgress() {
-    var progressEl = $("#shortsProgress");
-    if (progressEl) progressEl.style.width = ((currentShort / (shorts.length - 1)) * 100) + "%";
+function nextShort() {
+    if (currentShort < shorts.length - 1) {
+        currentShort++;
+        renderShorts();
+    }
 }
 
-$("#shortsBtn").addEventListener("click", showShorts);
-$("#shortsNext").addEventListener("click", function() {
-    if (currentShort < shorts.length - 1) { currentShort++; renderShorts(); }
-});
-$("#shortsPrev").addEventListener("click", function() {
-    if (currentShort > 0) { currentShort--; renderShorts(); }
-});
+function prevShort() {
+    if (currentShort > 0) {
+        currentShort--;
+        renderShorts();
+    }
+}
 
-function likeShort(id) { alert("❤️ Видео добавлено в избранное!"); }
-function commentShort(id) { alert("💬 Комментарии скоро будут доступны!"); }
+function goToShort(index) {
+    currentShort = index;
+    renderShorts();
+}
+
+function likeShort(id) { alert("❤️ Вам понравилось!"); }
+function commentShort(id) { alert("💬 Комментарии скоро!"); }
 function shareShort(id) { alert("📤 Ссылка скопирована!"); }
+function followAuthor(id) { alert("👤 Вы подписались!"); }
+
+$("#shortsBtn").addEventListener("click", function() {
+    if ($("#shortsView").classList.contains("hidden")) {
+        showShorts();
+    } else {
+        hideShorts();
+    }
+});
+
+// ── Logout ──
+$("#logoutBtn").addEventListener("click", function() {
+    if (confirm("Выйти из аккаунта?")) {
+        if (S.ws) S.ws.close();
+        clearSession();
+        showAuthScreen();
+    }
+});
 
 // ── Helpers ──
 function fmt(t) { if (!t) return ""; return new Date(t).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}); }

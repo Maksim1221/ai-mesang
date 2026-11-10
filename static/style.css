@@ -38,6 +38,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overf
 .icon-btn{width:38px;height:38px;background:transparent;border:none;border-radius:8px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .icon-btn:hover{background:var(--bg4);color:var(--text)}
 .my-profile-bar{display:flex;align-items:center;gap:10px;padding:12px 20px;background:var(--bg3);border-bottom:1px solid var(--border)}
+#logoutBtn{background:rgba(239,68,68,.1);color:#ef4444}
+#logoutBtn:hover{background:rgba(239,68,68,.2)}
 .avatar.me{width:40px;height:40px;background:var(--grad);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#fff;flex-shrink:0}
 .me-info{flex:1;min-width:0}
 .me-name{display:block;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -75,13 +77,16 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overf
 .chat-header-actions{display:flex;gap:4px}
 
 /* ── Messages ── */
-.messages-container{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:6px}
-.message{display:flex;gap:8px;max-width:70%;align-items:flex-end;animation:fadeIn .2s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.message.outgoing{margin-left:auto;flex-direction:row-reverse}
-.message .sender-avatar{width:30px;height:30px;background:linear-gradient(135deg,#a855f7,#ec4899);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
-.message-bubble{background:var(--bg3);border-radius:16px 16px 16px 4px;padding:10px 14px;display:flex;flex-direction:column;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-.message.outgoing .message-bubble{background:var(--accent);border-radius:16px 16px 4px 16px;box-shadow:0 2px 12px rgba(99,102,241,.3)}
+.messages-container{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:8px}
+.message{display:flex;gap:8px;max-width:75%;align-self:flex-end;animation:fadeIn .3s ease}
+.message.outgoing{align-self:flex-start}
+.message.ai-message{align-self:center;max-width:90%}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.message .sender-avatar{width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#a855f7);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.message-bubble{padding:10px 14px;border-radius:16px;display:flex;flex-direction:column}
+.message:not(.outgoing) .message-bubble{background:var(--bg4);border-bottom-left-radius:4px}
+.message.outgoing .message-bubble{background:var(--grad);color:#fff;border-bottom-right-radius:4px}
+.message.ai-message .message-bubble{background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(168,85,247,.15));border:1px solid rgba(99,102,241,.3)}
 .message-content{font-size:14px;line-height:1.5;word-wrap:break-word}
 .message-time{font-size:11px;color:var(--text3);text-align:right;margin-top:4px;opacity:.7}
 .message.outgoing .message-time{color:rgba(255,255,255,.7)}
@@ -178,6 +183,50 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overf
 .shorts-btn{width:48px;height:48px;border-radius:50%;background:var(--bg4);border:none;color:var(--text1);font-size:20px;cursor:pointer;transition:all .2s}
 .shorts-btn:hover{background:var(--grad);color:#fff}
 .shorts-progress{flex:1;max-width:200px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+
+/* ── Shorts Fullscreen (TikTok Style) ── */
+#shortsView{display:flex;flex-direction:column;height:100%;background:#000}
+.shorts-fullscreen{flex:1;position:relative;overflow:hidden}
+.shorts-item{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:transform .4s cubic-bezier(.25,.1,.25,1);font-size:80px;color:#fff}
+.shorts-item.active{transform:translateY(0)}
+.shorts-overlay{position:absolute;bottom:0;left:0;right:0;padding:20px;color:#fff;z-index:10;background:linear-gradient(transparent,rgba(0,0,0,.8))}
+.shorts-title{font-size:18px;font-weight:700;margin-bottom:6px;text-shadow:0 2px 4px rgba(0,0,0,.5)}
+.shorts-author{font-size:15px;opacity:.9;margin-bottom:8px}
+.shorts-desc{font-size:13px;opacity:.8;line-height:1.4}
+.shorts-actions-side{position:absolute;right:16px;bottom:100px;display:flex;flex-direction:column;gap:20px;z-index:10}
+.shorts-action-btn{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.15);backdrop-filter:blur(10px);border:none;color:#fff;font-size:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
+.shorts-action-btn:hover{background:rgba(255,255,255,.3);transform:scale(1.1)}
+.action-icon{font-size:24px}
+.action-count{font-size:10px;margin-top:2px}
+.shorts-nav{position:absolute;left:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:10}
+.shorts-nav-btn{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:20px;cursor:pointer;backdrop-filter:blur(10px);transition:all .2s}
+.shorts-nav-btn:hover{background:rgba(255,255,255,.4)}
+.shorts-dots{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;z-index:10}
+.shorts-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);cursor:pointer;transition:all .2s}
+.shorts-dot.active{background:#fff;transform:scale(1.3)}
+
+/* ── Profile Page (Telegram Style) ── */
+.profile-page{position:relative;min-height:100%}
+.profile-bg{height:200px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);position:relative}
+.profile-content{position:relative;padding:0 20px 20px;margin-top:-80px}
+.profile-avatar-large{width:100px;height:100px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:700;color:#667eea;margin:0 auto 16px;cursor:pointer;position:relative;box-shadow:0 4px 12px rgba(0,0,0,.2);overflow:hidden}
+.profile-name{text-align:center;font-size:24px;font-weight:700;color:var(--text1);margin-bottom:4px}
+.profile-email{text-align:center;font-size:14px;color:var(--text3);margin-bottom:12px}
+.profile-badges{text-align:center;display:flex;justify-content:center;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.profile-details{background:var(--bg3);border-radius:16px;padding:16px;margin-bottom:16px}
+.detail-item{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.detail-item:last-child{border-bottom:none}
+.detail-label{color:var(--text3);font-size:14px}
+.detail-value{color:var(--text1);font-weight:500;font-size:14px}
+.profile-actions{display:flex;flex-direction:column;gap:10px}
+.profile-actions button{width:100%}
+
+/* ── Edit Profile ── */
+.edit-profile{text-align:center}
+.profile-photo-section{margin-bottom:24px}
+.profile-photo-circle{width:100px;height:100px;border-radius:50%;background:var(--bg4);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:36px;cursor:pointer;position:relative;overflow:hidden}
+.camera-icon{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);padding:4px;font-size:14px}
+.edit-profile h3{margin-bottom:20px}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{width:6px}
