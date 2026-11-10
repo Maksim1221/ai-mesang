@@ -218,7 +218,7 @@ def api_get_messages(chat_id: int, limit: int = 50):
 
 
 @app.post("/api/chats/{chat_id}/messages")
-def api_send_message(chat_id: int, request: Request, user_id: int = 0):
+async def api_send_message(chat_id: int, request: Request, user_id: int = 0):
     """Отправить сообщение (текст или файл)"""
     import datetime
     ts = datetime.datetime.utcnow().isoformat()
