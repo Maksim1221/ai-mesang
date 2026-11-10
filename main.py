@@ -245,6 +245,21 @@ def api_send_message(chat_id: int, body: dict, user_id: int):
                         "content": content, "timestamp": ts}}
 
 
+@app.get("/api/chats/{chat_id}/members")
+def api_get_members(chat_id: int):
+    """Получить участников чата"""
+    members = db.get_members(chat_id)
+    return [
+        {
+            "id": m["id"], "username": m["username"], "email": m["email"],
+            "avatar": m["avatar"], "is_verified": bool(m["is_verified"]),
+            "is_admin": bool(m["is_admin"]), "is_banned": bool(m["is_banned"]),
+            "bio": m["bio"], "birth_date": m["birth_date"]
+        }
+        for m in members
+    ]
+
+
 # ── WebSocket ──
 @app.websocket("/ws/{user_id}")
 async def ws_endpoint(ws: WebSocket, user_id: int):

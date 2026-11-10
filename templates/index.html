@@ -56,6 +56,7 @@
       </div>
       <div class="status-dot online"></div>
       <button class="icon-btn" id="profileBtn" title="Профиль"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
+      <button class="icon-btn" id="shortsBtn" title="Шортсы"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><polygon points="10,8 16,12 10,16"/></svg></button>
       <button class="icon-btn" id="adminPanelBtn" title="Админ-панель" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
     </div>
     <div class="chat-list" id="chatList"></div>
@@ -81,7 +82,13 @@
           <button class="icon-btn" title="Ещё"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
         </div>
       </div>
-      <div class="messages-container" id="msgContainer"></div>
+      <div class="chat-content">
+        <div class="messages-container" id="msgContainer"></div>
+        <div class="members-sidebar" id="membersPanel">
+          <div class="members-header">👥 Участники (<span id="membersCount">0</span>)</div>
+          <div class="members-list" id="membersList"></div>
+        </div>
+      </div>
       <div class="message-input-area">
         <div class="typing-indicator" id="typingIndicator" style="display:none"><span id="typingText"></span></div>
         <div class="input-wrapper">
@@ -89,6 +96,16 @@
           <button id="sendBtn" class="send-btn" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Shorts Area -->
+  <div id="shortsView" class="hidden">
+    <div class="shorts-container" id="shortsContainer"></div>
+    <div class="shorts-controls">
+      <button class="shorts-btn" id="shortsPrev">◀</button>
+      <div class="shorts-progress" id="shortsProgress"></div>
+      <button class="shorts-btn" id="shortsNext">▶</button>
     </div>
   </div>
 </div>

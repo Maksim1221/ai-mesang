@@ -2,7 +2,7 @@
 var API = "/api";
 var WS_URL = "ws://" + window.location.host + "/ws";
 var $ = function(s) { return document.querySelector(s); };
-var S = {uid:null,email:"",uname:"",isAdmin:false,isVerified:false,chats:[],chat:null,msgs:[],users:[],ws:null,typing:false,tTO:null,bio:"",birth_date:""};
+var S = {uid:null,email:"",uname:"",isAdmin:false,isVerified:false,chats:[],chat:null,msgs:[],users:[],ws:null,typing:false,tTO:null,bio:"",birth_date:"",members:[]};
 
 // ── Auth ──
 $("#authUsername").addEventListener("input",checkAuth);
@@ -191,6 +191,32 @@ function openChat(c) {
         S.msgs = msgs;
         renderMsgs();
     }).catch(function(e) { console.error(e); });
+    
+    // Загружаем участников чата
+    fetchMembers(c.id);
+}
+
+function fetchMembers(chatId) {
+    fetch(API + "/chats/" + chatId + "/members").then(function(r) { return r.json(); }).then(function(members) {
+        S.members = members;
+        renderMembers(members);
+    }).catch(function(e) { console.error("Members error:", e); });
+}
+
+function renderMembers(members) {
+    var container = $("#membersList");
+    var countEl = $("#membersCount");
+    if (!container) return;
+    if (countEl) countEl.textContent = members.length;
+    container.innerHTML = members.map(function(m) {
+        return '<div class="member-item">' +
+            (m.avatar ? '<img src="' + m.avatar + '" class="member-avatar">' : '<div class="member-avatar">' + (m.username || m.email)[0].toUpperCase() + '</div>') +
+            '<div class="member-info">' +
+            '<span class="member-name">' + esc(m.username || m.email) + '</span>' +
+            (m.is_admin ? '<span class="badge badge-admin">🛡️</span>' : '') +
+            (m.is_verified ? '<span class="badge badge-verified">✓</span>' : '') +
+            '</div></div>';
+    }).join("");
 }
 
 // ── Messages ──
@@ -209,12 +235,25 @@ function renderMsgs() {
 
 function sendMsg() {
     var t = $("#msgInput").value.trim();
-    if (!t || !S.ws || !S.chat) return;
-    S.ws.send(JSON.stringify({type: "send_message", chat_id: S.chat.id, content: t}));
-    $("#msgInput").value = "";
-    $("#sendBtn").disabled = true;
-    S.typing = false;
-    if (S.tTO) clearTimeout(S.tTO);
+    if (!t || !S.chat) return;
+    
+    // Отправляем через REST API (надёжнее)
+    fetch(API + "/chats/" + S.chat.id + "/messages", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({content: t})
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        // Обновляем сообщения
+        if (data.ai_reply) {
+            S.msgs.push(data.message, data.ai_reply);
+        } else {
+            S.msgs.push(data.message);
+        }
+        renderMsgs();
+        fetchChats(); // Обновляем превью в списке
+        $("#msgInput").value = "";
+        $("#sendBtn").disabled = true;
+    }).catch(function(e) { console.error("Send error:", e); });
 }
 
 $("#sendBtn").addEventListener("click", sendMsg);
@@ -223,13 +262,6 @@ $("#msgInput").addEventListener("input", function() {
 });
 $("#msgInput").addEventListener("keydown", function(e) {
     if (e.key === "Enter") sendMsg();
-});
-$("#msgInput").addEventListener("input", function() {
-    if (!S.ws || !S.chat || S.typing) return;
-    S.typing = true;
-    S.ws.send(JSON.stringify({type: "typing", chat_id: S.chat.id}));
-    if (S.tTO) clearTimeout(S.tTO);
-    S.tTO = setTimeout(function() { S.typing = false; }, 2000);
 });
 
 function showTyping(text) {
@@ -400,6 +432,69 @@ function doAdmin(targetId, action) {
         body: JSON.stringify({action: action, target_id: targetId})
     }).then(function() { $("#adminPanelBtn").click(); }).catch(function(e) { console.error(e); });
 }
+
+// ── Shorts ──
+var shorts = [
+    {id:1, title:"Как создать мессенджер", author:"AI Mesang", color:"#6366f1"},
+    {id:2, title:"10 лайфхаков для программирования", author:"CodeMaster", color:"#8b5cf6"},
+    {id:3, title:"Тренды 2024 года", author:"TrendWatch", color:"#ec4899"},
+    {id:4, title:"Смешные коты 🐱", author:"CatLover", color:"#f59e0b"},
+    {id:5, title:"Как выучить Python за неделю", author:"PythonPro", color:"#10b981"},
+    {id:6, title:"Лучшие мемы недели", author:"MemeKing", color:"#ef4444"}
+];
+var currentShort = 0;
+
+function showShorts() {
+    $("#chatView").classList.add("hidden");
+    $("#noChat").classList.add("hidden");
+    $("#shortsView").classList.remove("hidden");
+    renderShorts();
+}
+
+function hideShorts() {
+    $("#shortsView").classList.add("hidden");
+    if (S.chat) {
+        $("#chatView").classList.remove("hidden");
+    } else {
+        $("#noChat").classList.remove("hidden");
+    }
+}
+
+function renderShorts() {
+    var container = $("#shortsContainer");
+    container.innerHTML = shorts.map(function(s, i) {
+        return '<div class="shorts-item ' + (i === currentShort ? 'active' : '') + '" data-id="' + s.id + '" style="transform:translateY(' + ((i - currentShort) * 100) + '%)">
+            <div class="shorts-video" style="background:' + s.color + ';display:flex;align-items:center;justify-content:center;font-size:48px;">🎬</div>
+            <div class="shorts-info">
+                <div class="shorts-title">' + esc(s.title) + '</div>
+                <div class="shorts-author">@' + esc(s.author) + '</div>
+            </div>
+            <div class="shorts-actions">
+                <button class="shorts-action-btn" onclick="likeShort(' + s.id + ')">❤️</button>
+                <button class="shorts-action-btn" onclick="commentShort(' + s.id + ')">💬</button>
+                <button class="shorts-action-btn" onclick="shareShort(' + s.id + ')">📤</button>
+            </div>
+        </div>';
+    }).join("");
+    updateShortsProgress();
+}
+
+function updateShortsProgress() {
+    var progressEl = $("#shortsProgress");
+    if (progressEl) progressEl.style.width = ((currentShort / (shorts.length - 1)) * 100) + "%";
+}
+
+$("#shortsBtn").addEventListener("click", showShorts);
+$("#shortsNext").addEventListener("click", function() {
+    if (currentShort < shorts.length - 1) { currentShort++; renderShorts(); }
+});
+$("#shortsPrev").addEventListener("click", function() {
+    if (currentShort > 0) { currentShort--; renderShorts(); }
+});
+
+function likeShort(id) { alert("❤️ Видео добавлено в избранное!"); }
+function commentShort(id) { alert("💬 Комментарии скоро будут доступны!"); }
+function shareShort(id) { alert("📤 Ссылка скопирована!"); }
 
 // ── Helpers ──
 function fmt(t) { if (!t) return ""; return new Date(t).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}); }
