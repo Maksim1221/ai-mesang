@@ -225,14 +225,16 @@ async def api_send_message(chat_id: int, request: Request, user_id: int = 0):
     
     # Проверяем, является ли запрос multipart
     content_type = request.headers.get("content-type", "")
-    
+
     if "multipart/form-data" in content_type:
         # Multipart запрос для файлов
-        form_data = request.form()
+        form_data = await request.form()
         content = ""
         msg_type = "text"
         file_data = None
         file_name = ""
+        is_circle = False
+        duration = None
         
         if "content" in form_data:
             content = form_data["content"]
@@ -240,11 +242,14 @@ async def api_send_message(chat_id: int, request: Request, user_id: int = 0):
             msg_type = form_data["type"]
         if "file" in form_data:
             file = form_data["file"]
-            file_content = file.file.read()
+            file_content = await file.read()
             file_name = file.filename or "file"
             msg_type = file.content_type.split("/")[0] if "/" in file.content_type else "file"
             file_data = file_content.decode("latin1")
-    
+        if "is_circle" in form_data:
+            is_circle = form_data["is_circle"] == "true"
+        if "duration" in form_data:
+            duration = form_data["duration"]
     else:
         # JSON запрос
         body = await request.json()
@@ -252,7 +257,9 @@ async def api_send_message(chat_id: int, request: Request, user_id: int = 0):
         msg_type = body.get("type", "text")
         file_data = body.get("file")
         file_name = body.get("file_name", "")
-    
+        is_circle = body.get("is_circle", False)
+        duration = body.get("duration")
+
     if not content and not file_data:
         raise HTTPException(400, "Empty message")
 
@@ -263,8 +270,8 @@ async def api_send_message(chat_id: int, request: Request, user_id: int = 0):
         msg_data = {"id": msg_id, "chat_id": chat_id, "sender_id": user_id,
                     "content": content, "timestamp": ts,
                     "type": msg_type, "file": file_data,
-                    "is_circle": body.get("is_circle", False) if "multipart" not in content_type else False,
-                    "duration": body.get("duration") if "multipart" not in content_type else None,
+                    "is_circle": is_circle,
+                    "duration": duration,
                     "file_name": file_name}
         ai_id = db.create_message(chat_id, 0, resp, "text", None)
         ai_ts = datetime.datetime.utcnow().isoformat()
@@ -279,8 +286,8 @@ async def api_send_message(chat_id: int, request: Request, user_id: int = 0):
         "message": {"id": msg_id, "chat_id": chat_id, "sender_id": user_id,
                     "content": content, "timestamp": ts,
                     "type": msg_type, "file": file_data,
-                    "is_circle": body.get("is_circle", False) if "multipart" not in content_type else False,
-                    "duration": body.get("duration") if "multipart" not in content_type else None,
+                    "is_circle": is_circle,
+                    "duration": duration,
                     "file_name": file_name},
         "chat_id": chat_id
     }
@@ -296,8 +303,8 @@ async def api_send_message(chat_id: int, request: Request, user_id: int = 0):
     return {"message": {"id": msg_id, "chat_id": chat_id, "sender_id": user_id,
                         "content": content, "timestamp": ts,
                         "type": msg_type, "file": file_data,
-                        "is_circle": body.get("is_circle", False) if "multipart" not in content_type else False,
-                        "duration": body.get("duration") if "multipart" not in content_type else None,
+                        "is_circle": is_circle,
+                        "duration": duration,
                         "file_name": file_name}}
 
 
