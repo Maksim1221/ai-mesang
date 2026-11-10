@@ -280,14 +280,85 @@ function renderMembers(members) {
     if (!container) return;
     if (countEl) countEl.textContent = members.length;
     container.innerHTML = members.map(function(m) {
-        return '<div class="member-item">' +
+        var onlineStatus = m.is_online ? '<span class="online-indicator" title="Онлайн">🟢</span>' :
+                           (m.last_seen ? '<span title="Был(а) ' + fmtLastSeen(m.last_seen) + '">⚫</span>' : '');
+        return '<div class="member-item" data-user-id="' + m.id + '">' +
             (m.avatar ? '<img src="' + m.avatar + '" class="member-avatar">' : '<div class="member-avatar">' + (m.username || m.email)[0].toUpperCase() + '</div>') +
             '<div class="member-info">' +
-            '<span class="member-name">' + esc(m.username || m.email) + '</span>' +
+            '<span class="member-name">' + esc(m.username || m.email) + ' ' + onlineStatus + '</span>' +
             (m.is_admin ? '<span class="badge badge-admin">🛡️</span>' : '') +
             (m.is_verified ? '<span class="badge badge-verified">✓</span>' : '') +
             '</div></div>';
     }).join("");
+    
+    // Добавляем обработчик клика
+    container.querySelectorAll(".member-item").forEach(function(el) {
+        el.onclick = function() {
+            var userId = parseInt(el.dataset.userId);
+            openUserProfile(userId);
+        };
+    });
+}
+
+function fmtLastSeen(timestamp) {
+    if (!timestamp) return "не в сети";
+    var date = new Date(timestamp);
+    var now = new Date();
+    var diff = now - date;
+    var minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "только что";
+    if (minutes < 60) return minutes + " мин. назад";
+    var hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + " ч. назад";
+    return date.toLocaleDateString();
+}
+
+function openUserProfile(userId) {
+    fetch(API + "/users/" + userId)
+        .then(function(r) { return r.json(); })
+        .then(function(user) {
+            var modal = $("#modalContent");
+            var avatarBg = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+            var onlineStatus = user.is_online ? '<span class="online-status">🟢 В сети</span>' :
+                               '<span class="offline-status">⚫ Был(а) ' + (user.last_seen ? fmtLastSeen(user.last_seen) : "не в сети") + '</span>';
+            modal.innerHTML = '<div class="profile-page">' +
+                '<div class="profile-bg" style="background:' + avatarBg + '"></div>' +
+                '<div class="profile-content">' +
+                '<div class="profile-avatar-large" id="profileAvatarLarge" style="background:#fff">' +
+                    (user.avatar ? '<img src="' + user.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">' : (user.username || user.email)[0].toUpperCase()) +
+                '</div>' +
+                '<div class="profile-name">' + esc(user.username || user.email) + ' ' + onlineStatus + '</div>' +
+                '<div class="profile-email">' + (user.email || "Email не указан") + '</div>' +
+                '<div class="profile-badges">' +
+                    (user.is_admin ? '<span class="badge badge-admin">🛡️ Админ</span>' : '') +
+                    (user.is_verified ? '<span class="badge badge-verified">✓ Верифицирован</span>' : '') +
+                    (!user.is_admin && !user.is_verified ? '<span class="badge">Обычный пользователь</span>' : '') +
+                '</div>' +
+                '<div class="profile-details">' +
+                    (user.bio ? '<div class="detail-item"><span class="detail-label">О себе</span><span class="detail-value">' + esc(user.bio) + '</span></div>' : '') +
+                    (user.birth_date ? '<div class="detail-item"><span class="detail-label">Дата рождения</span><span class="detail-value">' + user.birth_date + '</span></div>' : '') +
+                    '<div class="detail-item"><span class="detail-label">В системе с</span><span class="detail-value">' + (user.created_at ? user.created_at.split("T")[0] : "неизвестно") + '</span></div>' +
+                    '<div class="detail-item"><span class="detail-label">Последний вход</span><span class="detail-value">' + (user.last_seen ? user.last_seen.replace("T", " ") : "неизвестно") + '</span></div>' +
+                '</div>' +
+                '<div class="profile-actions">' +
+                    '<button class="btn-primary" id="startChatBtn">💬 Написать сообщение</button>' +
+                    '<button class="btn-secondary" onclick="closeModal()">Закрыть</button>' +
+                '</div>' +
+                '</div></div>';
+            $("#modalOverlay").classList.remove("hidden");
+            
+            $("#startChatBtn").onclick = function() {
+                fetch(API + "/chats?user_id=" + S.uid, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({name: "", member_ids: [userId]})
+                }).then(function() {
+                    closeModal();
+                    fetchChats();
+                }).catch(function(e) { console.error(e); });
+            };
+        })
+        .catch(function(e) { console.error("Profile error:", e); });
 }
 
 // ── Messages ──
@@ -298,24 +369,87 @@ function renderMsgs() {
         var m = S.msgs[i];
         var isAI = m.sender_id === 0 || m.username === "AI Assistant";
         var isOut = m.sender_id === S.uid;
+        var type = m.type || "text";
+        var file = m.file || "";
+        
         html += '<div class="message ' + (isOut ? 'outgoing' : '') + (isAI ? ' ai-message' : '') + '">';
         if (!isOut && m.sender_id !== 0) {
             html += '<div class="sender-avatar">' + (m.username || "?")[0].toUpperCase() + '</div>';
         }
-        html += '<div class="message-bubble"><div class="message-content">' + esc(m.content) + '</div>';
+        html += '<div class="message-bubble"><div class="message-content">';
+        
+        // Отображение медиа
+        if (type === "image" && file) {
+            html += '<img src="' + file + '" onclick="openImage(this.src)">';
+        } else if (type === "video" && file) {
+            if (m.is_circle) {
+                html += '<video class="video-circle" controls src="' + file + '"></video>';
+            } else {
+                html += '<video controls src="' + file + '"></video>';
+            }
+        } else if (type === "audio" && file) {
+            html += '<div class="voice-msg">';
+            html += '<button class="voice-play" onclick="playAudio(\'' + file + '\')">▶</button>';
+            html += '<audio src="' + file + '" id="audio_' + m.id + '"></audio>';
+            html += '<span>' + (m.duration || "0:00") + '</span>';
+            html += '</div>';
+        } else if (type === "file" && file) {
+            html += '<div class="file-attachment" onclick="downloadFile(\'' + file + '\',\'' + (m.file_name || 'file') + '\')">';
+            html += '📎 ' + (m.file_name || 'Файл');
+            html += '</div>';
+        } else {
+            html += esc(m.content);
+        }
+        
+        html += '</div>';
         html += '<div class="message-time">' + fmt(m.timestamp) + '</div></div></div>';
     }
     container.innerHTML = html;
     setTimeout(function() { container.scrollTop = container.scrollHeight; }, 50);
 }
 
-function sendMsg() {
-    var t = $("#msgInput").value.trim();
-    if (!t || !S.chat) return;
+function openImage(src) {
+    var overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.9);z-index:2000;display:flex;align-items:center;justify-content:center;cursor:pointer";
+    overlay.onclick = function() { document.body.removeChild(overlay); };
+    var img = document.createElement("img");
+    img.src = src;
+    img.style.cssText = "max-width:90%;max-height:90%;border-radius:8px";
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
+}
+
+function playAudio(src) {
+    var audio = document.getElementById("audio_" + src.split("_").pop());
+    if (audio) {
+        if (audio.paused) {
+            audio.play();
+            event.target.textContent = "⏸";
+        } else {
+            audio.pause();
+            event.target.textContent = "▶";
+        }
+    }
+}
+
+function downloadFile(url, name) {
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+function sendMsg(content, type, file, extra) {
+    var data = {content: content || "", type: type || "text"};
+    if (file) data.file = file;
+    if (extra) Object.assign(data, extra);
+    
     fetch(API + "/chats/" + S.chat.id + "/messages?user_id=" + S.uid, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({content: t})
+        body: JSON.stringify(data)
     }).then(function(r) { 
         if (!r.ok && r.status === 401) {
             clearSession();
@@ -340,12 +474,134 @@ function sendMsg() {
     });
 }
 
-$("#sendBtn").addEventListener("click", sendMsg);
+// ── Photo ──
+$("#photoBtn").addEventListener("click", function() {
+    $("#photoInput").click();
+});
+$("#photoInput").addEventListener("change", function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        sendMsg("", "image", ev.target.result);
+    };
+    reader.readAsDataURL(file);
+});
+
+// ── File ──
+$("#fileBtn").addEventListener("click", function() {
+    $("#fileInput").click();
+});
+$("#fileInput").addEventListener("change", function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        sendMsg(file.name, "file", ev.target.result, {file_name: file.name});
+    };
+    reader.readAsDataURL(file);
+});
+
+// ── Voice Recording ──
+var mediaRecorder;
+var audioChunks = [];
+var isRecording = false;
+
+$("#voiceBtn").addEventListener("mousedown", function() {
+    if (isRecording) return;
+    
+    navigator.mediaDevices.getUserMedia({audio: true}).then(function(stream) {
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        mediaRecorder.ondataavailable = function(e) {
+            audioChunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = function() {
+            var audioBlob = new Blob(audioChunks, {type: 'audio/webm'});
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                var audioBase64 = ev.target.result;
+                sendMsg("🎤 Голосовое", "audio", audioBase64, {duration: "0:05"});
+            };
+            reader.readAsDataURL(audioBlob);
+            stream.getTracks().forEach(function(track) { track.stop(); });
+        };
+        
+        mediaRecorder.start();
+        isRecording = true;
+        $("#voiceBtn").classList.add("recording");
+        $("#voiceRecording").style.display = "flex";
+    }).catch(function(err) {
+        alert("❌ Нет доступа к микрофону");
+    });
+});
+
+$("#voiceBtn").addEventListener("mouseup", function() {
+    if (!isRecording || !mediaRecorder) return;
+    mediaRecorder.stop();
+    isRecording = false;
+    $("#voiceBtn").classList.remove("recording");
+    $("#voiceRecording").style.display = "none";
+});
+
+$("#voiceCancel").addEventListener("click", function() {
+    if (!isRecording || !mediaRecorder) return;
+    mediaRecorder.cancel();
+    isRecording = false;
+    $("#voiceBtn").classList.remove("recording");
+    $("#voiceRecording").style.display = "none";
+});
+
+// ── Video Circle ──
+$("#videoBtn").addEventListener("click", function() {
+    navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(function(stream) {
+        var video = document.createElement("video");
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = true;
+        video.style.cssText = "position:fixed;bottom:80px;left:20px;width:120px;height:120px;border-radius:50%;border:3px solid var(--accent);z-index:2000;object-fit:cover";
+        document.body.appendChild(video);
+        
+        var stopBtn = document.createElement("button");
+        stopBtn.textContent = "⏹ Отправить";
+        stopBtn.style.cssText = "position:fixed;bottom:100px;right:20px;background:var(--grad);color:#fff;border:none;padding:10px 20px;border-radius:20px;cursor:pointer;z-index:2000";
+        document.body.appendChild(stopBtn);
+        
+        stopBtn.onclick = function() {
+            var canvas = document.createElement("canvas");
+            canvas.width = 300;
+            canvas.height = 300;
+            var ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, 300, 300);
+            var videoBase64 = canvas.toDataURL("image/jpeg");
+            sendMsg("📹 Видеокружочек", "video", videoBase64, {is_circle: true});
+            document.body.removeChild(video);
+            document.body.removeChild(stopBtn);
+            stream.getTracks().forEach(function(track) { track.stop(); });
+        };
+        
+        // Отмена
+        document.addEventListener("keydown", function cancelVideo(e) {
+            if (e.key === "Escape") {
+                document.body.removeChild(video);
+                document.body.removeChild(stopBtn);
+                stream.getTracks().forEach(function(track) { track.stop(); });
+                document.removeEventListener("keydown", cancelVideo);
+            }
+        });
+    }).catch(function(err) {
+        alert("❌ Нет доступа к камере");
+    });
+});
 $("#msgInput").addEventListener("input", function() {
     $("#sendBtn").disabled = !$("#msgInput").value.trim();
 });
 $("#msgInput").addEventListener("keydown", function(e) {
-    if (e.key === "Enter") sendMsg();
+    if (e.key === "Enter" && $("#msgInput").value.trim()) {
+        sendMsg($("#msgInput").value.trim());
+    }
 });
 
 function showTyping(text) {

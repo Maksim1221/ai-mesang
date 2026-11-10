@@ -92,9 +92,21 @@
       </div>
       <div class="message-input-area">
         <div class="typing-indicator" id="typingIndicator" style="display:none"><span id="typingText"></span></div>
+        <div class="media-actions">
+          <button class="media-btn" id="photoBtn" title="Фото">📷</button>
+          <button class="media-btn" id="fileBtn" title="Файл">📎</button>
+          <button class="media-btn" id="voiceBtn" title="Голосовое">🎤</button>
+          <button class="media-btn" id="videoBtn" title="Кружочек">⭕</button>
+          <input type="file" id="photoInput" accept="image/*" style="display:none">
+          <input type="file" id="fileInput" style="display:none">
+        </div>
         <div class="input-wrapper">
           <input type="text" id="msgInput" placeholder="Написать сообщение..." autocomplete="off">
           <button id="sendBtn" class="send-btn" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+        </div>
+        <div class="voice-recording" id="voiceRecording" style="display:none">
+          <div class="voice-wave">🎤 Запись...</div>
+          <button class="voice-cancel" id="voiceCancel">✕</button>
         </div>
       </div>
     </div>

@@ -27,6 +27,8 @@ def init_db():
         is_admin INTEGER DEFAULT 0,
         is_verified INTEGER DEFAULT 0,
         is_banned INTEGER DEFAULT 0,
+        is_online INTEGER DEFAULT 0,
+        last_seen TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS chats (
@@ -48,6 +50,8 @@ def init_db():
         chat_id INTEGER NOT NULL,
         sender_id INTEGER NOT NULL,
         content TEXT NOT NULL,
+        msg_type TEXT DEFAULT 'text',
+        file_data TEXT,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
         FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
@@ -77,6 +81,19 @@ def get_user_by_id(user_id):
     u = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
     conn.close()
     return u
+
+
+def update_online_status(user_id, is_online):
+    """Обновить статус онлайн"""
+    import datetime
+    conn = _get_conn()
+    now = datetime.datetime.utcnow().isoformat()
+    conn.execute(
+        "UPDATE users SET is_online=?, last_seen=? WHERE id=?",
+        (1 if is_online else 0, now if is_online else now, user_id)
+    )
+    conn.commit()
+    conn.close()
 
 
 def create_user(email, username, password_hash, is_admin=0):
@@ -205,21 +222,33 @@ def get_messages(chat_id, limit=50):
     conn = _get_conn()
     rows = conn.execute(
         "SELECT m.id, m.chat_id, m.sender_id, m.content, m.timestamp, "
-        "u.username, u.avatar, u.is_verified, u.is_admin "
+        "m.msg_type, m.file_data, u.username, u.avatar, u.is_verified, u.is_admin "
         "FROM messages m JOIN users u ON u.id=m.sender_id "
         "WHERE m.chat_id=? ORDER BY m.timestamp DESC LIMIT ?",
         (chat_id, limit)
     ).fetchall()
     rows.reverse()
+    result = []
+    for r in rows:
+        result.append({
+            "id": r["id"], "chat_id": r["chat_id"], "sender_id": r["sender_id"],
+            "content": r["content"], "timestamp": r["timestamp"],
+            "username": r["username"], "avatar": r["avatar"],
+            "is_verified": bool(r["is_verified"]),
+            "is_admin": bool(r["is_admin"]),
+            "type": r["msg_type"] or "text",
+            "file": r["file_data"]
+        })
     conn.close()
-    return rows
+    return result
 
 
-def create_message(chat_id, sender_id, content):
+def create_message(chat_id, sender_id, content, msg_type="text", file_data=None):
+    """Создать сообщение"""
     conn = _get_conn()
     cur = conn.execute(
-        "INSERT INTO messages (chat_id, sender_id, content) VALUES (?,?,?)",
-        (chat_id, sender_id, content)
+        "INSERT INTO messages (chat_id, sender_id, content, msg_type, file_data) VALUES (?,?,?,?,?)",
+        (chat_id, sender_id, content, msg_type, file_data)
     )
     conn.commit()
     mid = cur.lastrowid

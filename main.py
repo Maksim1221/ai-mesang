@@ -2,7 +2,7 @@
 import os
 import random
 from typing import Dict
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -153,6 +153,24 @@ def api_search_users(q: str = "", user_id: int = 0):
     ]
 
 
+@app.get("/api/users/{user_id}")
+def api_get_user_profile(user_id: int):
+    """Получить профиль пользователя"""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(404, "Not found")
+    return {
+        "id": user["id"], "email": user["email"], "username": user["username"],
+        "avatar": user["avatar"], "bio": user["bio"], "birth_date": user["birth_date"],
+        "is_verified": bool(user["is_verified"]),
+        "is_admin": bool(user["is_admin"]),
+        "is_banned": bool(user["is_banned"]),
+        "is_online": bool(user["is_online"]),
+        "last_seen": user["last_seen"],
+        "created_at": user["created_at"]
+    }
+
+
 # ── Chats ──
 @app.get("/api/chats")
 def api_get_chats(user_id: int):
@@ -200,38 +218,72 @@ def api_get_messages(chat_id: int, limit: int = 50):
 
 
 @app.post("/api/chats/{chat_id}/messages")
-def api_send_message(chat_id: int, body: dict, user_id: int):
-    """Отправить сообщение"""
-    content = body.get("content", "")
-    if not content:
-        raise HTTPException(400, "Empty message")
-
+def api_send_message(chat_id: int, request: Request, user_id: int = 0):
+    """Отправить сообщение (текст или файл)"""
     import datetime
     ts = datetime.datetime.utcnow().isoformat()
+    
+    # Проверяем, является ли запрос multipart
+    content_type = request.headers.get("content-type", "")
+    
+    if "multipart/form-data" in content_type:
+        # Multipart запрос для файлов
+        form_data = request.form()
+        content = ""
+        msg_type = "text"
+        file_data = None
+        file_name = ""
+        
+        if "content" in form_data:
+            content = form_data["content"]
+        if "type" in form_data:
+            msg_type = form_data["type"]
+        if "file" in form_data:
+            file = form_data["file"]
+            file_content = file.file.read()
+            file_name = file.filename or "file"
+            msg_type = file.content_type.split("/")[0] if "/" in file.content_type else "file"
+            file_data = file_content.decode("latin1")
+    
+    else:
+        # JSON запрос
+        body = await request.json()
+        content = body.get("content", "")
+        msg_type = body.get("type", "text")
+        file_data = body.get("file")
+        file_name = body.get("file_name", "")
+    
+    if not content and not file_data:
+        raise HTTPException(400, "Empty message")
 
     # AI-чат
     if chat_id == 0:
         resp = random.choice(AI_RESPONSES)
-        # Сообщение пользователя
-        msg_id = db.create_message(chat_id, user_id, content)
+        msg_id = db.create_message(chat_id, user_id, content, msg_type, file_data)
         msg_data = {"id": msg_id, "chat_id": chat_id, "sender_id": user_id,
-                    "content": content, "timestamp": ts}
-        # Ответ AI
-        ai_id = db.create_message(chat_id, 0, resp)
+                    "content": content, "timestamp": ts,
+                    "type": msg_type, "file": file_data,
+                    "is_circle": body.get("is_circle", False) if "multipart" not in content_type else False,
+                    "duration": body.get("duration") if "multipart" not in content_type else None,
+                    "file_name": file_name}
+        ai_id = db.create_message(chat_id, 0, resp, "text", None)
         ai_ts = datetime.datetime.utcnow().isoformat()
         ai_msg = {"id": ai_id, "chat_id": chat_id, "sender_id": 0,
                   "content": resp, "timestamp": ai_ts, "username": "AI Assistant"}
         return {"message": msg_data, "ai_reply": ai_msg}
 
     # Обычный чат
-    msg_id = db.create_message(chat_id, user_id, content)
+    msg_id = db.create_message(chat_id, user_id, content, msg_type, file_data)
     broadcast = {
         "type": "new_message",
         "message": {"id": msg_id, "chat_id": chat_id, "sender_id": user_id,
-                    "content": content, "timestamp": ts},
+                    "content": content, "timestamp": ts,
+                    "type": msg_type, "file": file_data,
+                    "is_circle": body.get("is_circle", False) if "multipart" not in content_type else False,
+                    "duration": body.get("duration") if "multipart" not in content_type else None,
+                    "file_name": file_name},
         "chat_id": chat_id
     }
-    # Отправить всем участникам
     members = db.get_members(chat_id)
     for m in members:
         ws = connected_users.get(m["id"])
@@ -242,7 +294,11 @@ def api_send_message(chat_id: int, body: dict, user_id: int):
             except Exception:
                 pass
     return {"message": {"id": msg_id, "chat_id": chat_id, "sender_id": user_id,
-                        "content": content, "timestamp": ts}}
+                        "content": content, "timestamp": ts,
+                        "type": msg_type, "file": file_data,
+                        "is_circle": body.get("is_circle", False) if "multipart" not in content_type else False,
+                        "duration": body.get("duration") if "multipart" not in content_type else None,
+                        "file_name": file_name}}
 
 
 @app.get("/api/chats/{chat_id}/members")
@@ -266,6 +322,8 @@ async def ws_endpoint(ws: WebSocket, user_id: int):
     """WebSocket подключение"""
     await ws.accept()
     connected_users[user_id] = ws
+    # Обновляем статус онлайн
+    db.update_online_status(user_id, True)
     try:
         while True:
             data = await ws.receive_json()
@@ -282,6 +340,8 @@ async def ws_endpoint(ws: WebSocket, user_id: int):
                             })
     except WebSocketDisconnect:
         connected_users.pop(user_id, None)
+        # Обновляем статус оффлайн
+        db.update_online_status(user_id, False)
 
 
 # ── Admin ──
